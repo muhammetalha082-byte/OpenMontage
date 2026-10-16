@@ -1,0 +1,54 @@
+name: OpenMontage System Check
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/system-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openmontage-system-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Set up OpenMontage
+        run: make setup PYTHON_VERSION=3.11
+      - name: Write capability report (no generation)
+        run: |
+          mkdir -p system-report
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          from tools.tool_registry import registry
+          registry.discover()
+          report = registry.provider_menu_summary()
+          Path("system-report/capabilities.json").write_text(
+              json.dumps(report, indent=2, default=str), encoding="utf-8"
+          )
+          print("Capability report saved. No content generation or publishing requested.")
+          PY
+      - name: Save report
+        uses: actions/upload-artifact@v4
+        with:
+          name: openmontage-system-report
+          path: system-report/capabilities.json
+          if-no-files-found: error
+          retention-days: 3
